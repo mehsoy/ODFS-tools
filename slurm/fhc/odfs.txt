@@ -1,0 +1,26 @@
+Beeond client rebuild config:
+#BEEGFS_OPENTK_IBVERBS=1 sonst wird ohne infiniband support gebaut
+# Wenn nicht sztandard Ofed Treiber genutzt werden,
+# muss sonst explizit angebeben werdne
+# z.b.OFED_INCLUDE_PATH=/usr/src/kernels/3.10.0-862.3.2.el7.x86_64/include
+# Beegfs client wird bei jedem neuen Kernel automatisch gebaut
+# oder zum test: $/etc/init.d/beegfs-client rebuild
+buildArgs=-j8 BEEGFS_OPENTK_IBVERBS=1
+
+###############################################################
+#beeond script anpassen
+vim /usr/bin/beeond
+
+
+SSH_PARAMS=(-qq -oNumberOfPasswordPrompts=0 -oStrictHostKeyChecking=no )
+->
+SSH_PARAMS=(-i /root/.ssh/adafs -qq -oNumberOfPasswordPrompts=0 -oStrictHostKeyChecking=no )
+
+
+PDSH_RCMD="ssh"
+->
+PDSH_RCMD="ssh"
+export PDSH_SSH_ARGS_APPEND="-i /root/.ssh/adafs"
+PDSH_SSH_ARGS_APPEND="-i /root/.ssh/adafs"
+#########################################################
+

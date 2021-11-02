@@ -1,0 +1,82 @@
+# Beegfs packackes installieren:
+beegfs-helperd-7.0-el7.x86_64
+beegfs-storage-7.0-el7.x86_64
+beegfs-common-7.0-el7.noarch
+beegfs-client-devel-7.0-el7.noarch
+beegfs-client-7.0-el7.noarch
+beegfs-mgmtd-7.0-el7.x86_64
+beegfs-utils-7.0-el7.x86_64
+beegfs-opentk-lib-7.0-el7.x86_64
+beegfs-meta-7.0-el7.x86_64
+###############################################
+#testen of beegfs client module compilieren lässt
+vim /etc/beegfs/beegfs-client-autobuild.conf
+#BEEGFS_OPENTK_IBVERBS=1 sonst wird ohne infiniband support gebaut
+# Wenn nicht standard Ofed Treiber genutzt werden,
+# muss sonst explizit angebeben werdne
+# z.b.OFED_INCLUDE_PATH=/usr/src/kernels/3.10.0-862.3.2.el7.x86_64/include
+# Beegfs client wird bei jedem neuen Kernel automatisch gebaut
+# oder zum test: $/etc/init.d/beegfs-client rebuild
+buildArgs=-j8 BEEGFS_OPENTK_IBVERBS=1
+##############################################
+/etc/init.d/beegfs-client rebuild
+modprobe beegfs
+###############################################################
+#beeond script anpassen
+# SSH Schlüssel sollte durch KITe-Postinstall script konfiguriert werden
+vim /usr/bin/beeond
+SSH_PARAMS=(-qq -oNumberOfPasswordPrompts=0 -oStrictHostKeyChecking=no )
+->
+SSH_PARAMS=(-i /root/.ssh/adafs -qq -oNumberOfPasswordPrompts=0 -oStrictHostKeyChecking=no )
+
+PDSH_RCMD="ssh"
+->
+PDSH_RCMD="ssh"
+export PDSH_SSH_ARGS_APPEND="-i /root/.ssh/adafs"
+PDSH_SSH_ARGS_APPEND="-i /root/.ssh/adafs"
+#########################################################
+#beeond test
+echo fhcn0001 > /tmp/nodes.txt
+echo fhcn0002 >> /tmp/nodes.txt
+mkdir /mnt/loop42
+beeond start -n /tmp/nodes.txt -d /tmp/beeond -c /mnt/beeond
+df | grep beeond
+beeond stop -n /tmp/nodes.txt -P -L -d
+#-P for PDSH
+#Beegfs funkioniert
+##########################################################
+
+#Slurm configureren
+#slurm.conf
+#prüfen ob Prolog bei allocaiton ausgefühgrt werden
+# sonst funzt konzept nicht (PrologFlags)
+TaskProlog=/etc/slurm/task_prolog.fhc
+NodeName=fhcn[0001-0004] RealMemory=63720  Feature=LSDF,BEEOND
+##############################
+#Crate task prolog to set ENV
+/etc/slurm/task_prolog.fhc
+#!/bin/bash
+echo "export ODFS=/mnt/odfs/$SLURM_JOBID"
+#######################################
+#Add content from slurm/pro_epilogue.txt to prologue and epilogue file
+#########################################
+
+#Create dirs
+pdsh -a mkdir /mnt/loop42
+pdsh -a mkdir /mnt/odfs
+
+
+#Have fun
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,39 @@
+#!/bin/bash
+set -x
+
+
+
+set DEBUG=1
+source /etc/slurm/adafs/functions.sh
+nodefile=/tmp/slurm_nodelist.$SLURM_JOB_ID
+if [[ $DEBUG == 1 ]];then
+	echo "EPILOGUE beeond XXX " >> /tmp/slurm.$SLURM_JOB_ID
+	export >> /tmp/slurm.$SLURM_JOB_ID
+fi
+
+#Little bit messy, SLURM_JOB_CONSTRAINTS not available in epilog
+#so we are checking for the ADAFS Status file
+source /etc/slurm/adafs/adafs.conf
+source /etc/slurm/adafs/functions.sh
+if [[ -r ${ADAFSSTATUSFILE} ]] ; then
+        source /etc/slurm/adafs/adafs.conf
+        source /etc/slurm/adafs/functions.sh
+        job_hosts=`scontrol show hostnames`
+        head_node=`echo $job_hosts | awk '{print $1;}'`
+        if [[ $DEBUG == 1 ]];then
+                echo $job_hosts >> /tmp/slurm.$SLURM_JOB_ID
+                echo $head_node >> /tmp/slurm.$SLURM_JOB_ID
+                export >> /tmp/slurm.$SLURM_JOB_ID
+        fi
+	#First stop beeond, we are doing quick stoplocal
+	#make shure epilogue is executed on all nodes 
+	stop_beeond
+	kill_beeond
+
+       if [[ ${ADAFSLOOPBACK} == 1 ]]; then
+                #This epilogue must run on all allocated nodes
+                #check your slurm config
+		#Removing Loopback mountpoint
+                remove_loopmount
+       fi
+fi

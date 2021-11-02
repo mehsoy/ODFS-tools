@@ -1,0 +1,174 @@
+
+
+#ADAFSLOOPDEVICE=/dev/loop42
+ADAFSIMAGE=/tmp/adafs.img
+ADAFSLOOPBACKMOUNTPOINT=/mnt/loop42
+ADAFSNODEFILE=/tmp/nodefile.adafs
+ADAFSMOUNTPOINT=/mnt/adafs
+ADAFSSTATUSFILE=/tmp/adafs-status
+ADAFSCONFFILE=/project/fhc-project-scs/az2556/adafs.conf
+
+
+case "${SCRIPT_NAME}" in
+    prologue*)
+        JOB_ID="$1"
+        JOB_USER="$2"
+        JOB_GROUP="$3"
+        JOB_NAME="$4"
+        JOB_REQ_RES="$5"
+        JOB_QUEUE="$6"
+        JOB_ACCOUNT="$7"
+        ;;
+    epilogue*)
+        JOB_ID="$1"
+        JOB_USER="$2"
+        JOB_GROUP="$3"
+        JOB_NAME="$4"
+        JOB_SESSION_ID="$5"
+        JOB_REQ_RES="$6"
+        JOB_USED_RES="$7"
+        JOB_QUEUE="$8"
+        JOB_ACCOUNT="$9"
+        JOB_EXIT_CODE="${10}"
+        ;;
+esac
+
+function create_loopmount() {
+     #read config for adafs
+     # contains
+     #MKFSTYPE
+     #MKFSOPTION
+     #MOUNTOPTION
+     #IMAGESIZE
+     if [[ -r ${ADAFSCONFFILE} ]]; then
+        source  ${ADAFSCONFFILE}
+     fi
+     #since this machine does not have any free partition we are creating image and using loopback
+     dd if=/dev/zero of=${ADAFSIMAGE} bs=1 count=0 seek=${IMAGESIZE} status=none
+     ${MKFSTYPE} ${MKFSOPTION} ${ADAFSIMAGE}
+     mount ${MOUNTOPTION} ${ADAFSIMAGE} ${ADAFSLOOPBACKMOUNTPOINT}
+}
+
+function remove_loopmount() {
+     i=0
+     while [[ $i  -le 5 ]]
+     do
+        #adafs still mounted
+        #logger "while loop for removing ${ADAFSMOUNTPOINT} - run $i"
+        kill_beeond
+        sleep 3
+        mountpoint -q ${ADAFSMOUNTPOINT}
+        if [[ "$?" -ne "0" ]]
+            then
+                break
+        fi
+        i=$[$i+1]
+     done
+     #message "removing loopmount"
+     k=0
+     while [[ $k  -le 5 ]]
+     do
+        logger "running umount on ${ADAFSLOOPBACKMOUNTPOINT}"
+        /usr/bin/umount -d -f -v ${ADAFSLOOPBACKMOUNTPOINT}
+        sleep 1
+        mountpoint -q ${ADAFSLOOPBACKMOUNTPOINT}
+        if [[ "$?" -ne "0" ]]
+            then
+                break
+        fi
+        k=$[$k+1]
+     done
+
+     #/usr/bin/umount -d -f -v ${ADAFSLOOPBACKMOUNTPOINT}
+     #logger "/usr/bin/umount -d -f -v ${ADAFSLOOPBACKMOUNTPOINT}"
+     #/usr/bin/umount -f -v ${ADAFSLOOPDEVICE}  2>&1 >> /tmp/blub2.txt
+     #/usr/sbin/losetup -d  ${ADAFSLOOPDEVICE}
+     rm  ${ADAFSIMAGE}
+}
+
+function start_beeond() {
+    nodefile=/var/spool/torque/aux/$JOB_ID
+    if [[ -r $nodefile ]]; then
+        nodes=$(cat $nodefile | uniq)
+    fi
+    #write nodefile
+    for i in $nodes
+    do
+        echo "$i" >> ${ADAFSNODEFILE}
+    done
+    beeond start -q -n ${ADAFSNODEFILE} -d ${ADAFSLOOPBACKMOUNTPOINT}  -c ${ADAFSMOUNTPOINT}
+    echo "${JOB_USER}" > ${ADAFSSTATUSFILE}
+    echo "${JOB_ID}" >> ${ADAFSSTATUSFILE}
+    echo "${ADAFSMOUNTPOINT}" >> ${ADAFSSTATUSFILE}
+    chmod 755 ${ADAFSSTATUSFILE}
+}
+
+function kill_beeond() {
+    /usr/bin/beeond stoplocal -i /tmp/beeond.tmp -q -L -c -u
+    killall -q /opt/beegfs/sbin/beegfs-storage
+    killall -q /opt/beegfs/sbin/beegfs-helperd
+    killall -q /opt/beegfs/sbin/beegfs-mgmtd
+    killall -q /opt/beegfs/sbin/beegfs-meta
+    rmmod beegfs
+    #logger "rmmod beegfs"
+}
+function stop_beeond() {
+        #user requested adafs and now stop it
+        #try the nice way
+        #/usr/bin/beeond stop -q -n ${ADAFSNODEFILE} -i /tmp/beeond.tmp -L -c
+        /usr/bin/beeond stoplocal -q -i /tmp/beeond.tmp -L -c -u
+        rm  ${ADAFSNODEFILE}  ${ADAFSSTATUSFILE} /tmp/beeond.tmp
+}
+
+
+
+
+case "${SCRIPT_NAME}" in
+    prologue*)
+        #health_check
+        clean_IPC
+        #clean_temp_dirs
+        #clean_numa
+        create_cgroup_dirs
+        ;;
+esac
+
+echo ${JOB_REQ_RES} | grep "adafs"
+ADAFS=$?
+if [[ "${ADAFS}" -eq 0 ]]; then
+    if [[ $JOB_ID =~ "dsin" ]];then
+
+            case "${SCRIPT_NAME}" in
+                prologue*)
+                create_loopmount
+                ;;
+            esac
+
+            case "${SCRIPT_NAME}" in
+                prologue)
+                start_beeond
+                ;;
+            esac
+    fi
+    if [[ $JOB_ID =~ "dsout" ]];then
+            case "${SCRIPT_NAME}" in
+                epilogue*)
+                    #logger "epilogue YYY"
+                    #remove_loopmount
+                    #kill_beeond
+                    stop_beeond
+                    remove_loopmount
+                    ;;
+            esac
+   fi
+fi
+
+case "${SCRIPT_NAME}" in
+    epilogue*)
+        #health_check
+        clean_IPC
+        #clean_temp_dirs
+        #clean_numa
+        create_cgroup_dirs
+        ;;
+esac
